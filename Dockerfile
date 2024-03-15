@@ -2,10 +2,20 @@
 FROM python:3-alpine
 
 # Install necessary dependencies
-RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm
-
+# RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm
+# RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm libffi-dev freetype-dev libpng-dev zlib-dev
+RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm libffi-dev freetype-dev libpng-dev zlib-dev jpeg-dev openjpeg-dev tiff-dev tk-dev tcl-dev harfbuzz-dev fribidi-dev
+RUN apk add --no-cache sudo
 RUN pip install --upgrade pip
-RUN pip install jupyter pandas numpy matplotlib seaborn scikit-learn
+# RUN pip install jupyter pandas numpy matplotlib seaborn scikit-learn
+RUN pip install jupyter
+RUN pip install pandas
+RUN pip install numpy
+# RUN pip install matplotlib
+# RUN pip install seaborn
+# RUN pip install scikit-learn
+
+# RUN apk add --update qemu-x86_64
 
 # Set working directory
 WORKDIR /app
@@ -15,10 +25,15 @@ COPY package.json package-lock.json /app/
 RUN npm install
 
 # Copy the rest of the application files
-COPY . /app
+# add --no-cache to avoid caching
+COPY . /app 
+# COPY . /app
+COPY jupyter_notebook_config.py /root/.jupyter/
 
 # Expose port for Node.js application
 EXPOSE 3015
 
+# Expose port for Jupyter Notebook
+EXPOSE 8888
 # Command to run the Node.js server
 CMD ["node", "server.js"]
