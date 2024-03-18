@@ -35,21 +35,6 @@ app.post('/run-notebook', upload.any(), (req, res) => {
     let notebookFile;
     let datasetFile;
 
-    console.log('Running the ls command using spawn ..');
-    const ls = spawn('ls');
-
-    ls.stdout.on('data', (data) => {
-        console.log(`stdout: ${data}`);
-    });
-
-    ls.stderr.on('data', (data) => {
-        console.log(`stderr ls: ${data}`);
-    });
-
-    ls.on('close', (code) => {
-        console.log(`child process exited with code ${code}`);
-    });
-
     for (let i = 0; i < req.files.length; i++) {
         if (req.files[i].fieldname === 'notebookFile') {
             notebookFile = req.files[i];
@@ -61,17 +46,7 @@ app.post('/run-notebook', upload.any(), (req, res) => {
     console.log('Notebook File path:', notebookFile.path);
     console.log('Dataset File path:', datasetFile.path);
 
-    // Copy the dataset file to the /home/gl_jupyter/test1 directory with filename as dataset.csv
-
-
-
-    // console.log('Running the Jupyter notebook server...');
-
     console.log('Running the Jupyter notebook server...');
-    // now pass the notebook file path to the jupyter notebook server from /home/gl_jupyter/test1 directory
-    // pass the dataset file path to the jupyter notebook server from /home/gl_jupyter/test1 directory
-
-
 
     exec('adduser --disabled-password --gecos "" gl_jupyter', (error, stdout, stderr) => {
         if (error) {
@@ -84,7 +59,7 @@ app.post('/run-notebook', upload.any(), (req, res) => {
         }
         console.log(`stdout: ${stdout}`);
 
-        exec('cd /home/gl_jupyter/ && mkdir test1 && chown -R gl_jupyter:gl_jupyter test1', (error, stdout, stderr) => {
+        exec('cd /home/gl_jupyter/ && mkdir -p test1 && chown -R gl_jupyter:gl_jupyter test1', (error, stdout, stderr) => {
             if (error) {
                 console.log(`error: ${error.message}`);
                 return;
@@ -132,13 +107,13 @@ app.post('/run-notebook', upload.any(), (req, res) => {
 
     notebookServerPid = notebookServer.pid;
     console.log(`Jupyter notebook server PID: ${notebookServerPid}`);
-
-    // const notebookServer = spawn('jupyter', ['notebook', '--ip=*', '--allow-root', '--port=8888', `--NotebookApp.notebook_dir='/home/gl_jupyter/test1'`, `--NotebookApp.default_url=/notebooks/notebook.ipynb`, `--NotebookApp.tornado_settings='{"headers": {"Content-Security-Policy": "frame-ancestors *"}}'`]);
-    // const notebookServer = spawn('jupyter', ['notebook', '--ip=*', '--allow-root', '--port=8888', `--NotebookApp.notebook_dir='/home/gl_jupyter/test1'`, `--NotebookApp.default_url=/notebooks/notebook.ipynb`, `--NotebookApp.tornado_settings='{"headers": {"Content-Security-Policy": "frame-ancestors http://localhost:3015"}}'`]);
-
-    // const notebookServer = spawn('jupyter', ['notebook', '--ip=*', '--allow-root', '--port=8888', `--NotebookApp.notebook_dir='/uploads'`, `--NotebookApp.default_url=/notebooks/${notebookFile.path}`]);
+    
     notebookServer.stdout.on('data', (data) => {
         console.log(`stdout: ${data}`);
+        const output = data.toString();
+        if (output.includes('The Jupyter Notebook is running at')) {
+            res.json({ status: 'OK' });
+        }
     });
 
     notebookServer.stderr.on('data', (data) => {
@@ -154,34 +129,31 @@ app.post('/run-notebook', upload.any(), (req, res) => {
         console.log(`Jupyter notebook server exited with code ${code}`);
     });
 
-    // try {
-    //     // Launch a jupyter notebook server
-    //     exec(`jupyter notebook --port=8888 --NotebookApp.notebook_dir='/' --NotebookApp.default_url=/notebooks/${notebookFile.path}`, (error, stdout, stderr) => {
-    //         if (error) {
-    //             console.error(`Failed to start Jupyter notebook server: ${error.message}`);
-    //             res.status(500).json({ status: 'Error', message: error.message });
-    //             return;
-    //         }
-    //         if (stderr) {
-    //             console.log(`stderr: ${stderr}`);
-    //             return;
-    //         }
-    //         console.log(`stdout: ${stdout}`);
+});
 
+app.post('/stop-notebook', (req, res) => {
+    const port = req.body.port;
+    console.log(`Stopping Jupyter notebook server on port ${port}...`);
 
-    //         // Print the URL to access the Jupyter notebook
-    //         console.log(`URL to access the Jupyter notebook: http://localhost:8888/notebooks/${notebookFile.path}`);
+    const stopServer = spawn('jupyter', ['notebook', 'stop', port]);
 
-    //         res.json({ status: 'OK' });
-    //     });
-    // }
-    // catch (error) {
-    //     console.error(`Failed to start Jupyter notebook server: ${error.message}`);
-    //     res.status(500).json({ status: 'Error', message: error.message });
-    //     return;
-    // }
+    stopServer.stdout.on('data', (data) => {
+        console.log(`stdout: ${data}`);
+    });
 
+    stopServer.stderr.on('data', (data) => {
+        console.error(`stderr: ${data}`);
+    });
 
+    stopServer.on('error', (error) => {
+        console.error(`Failed to stop Jupyter notebook server: ${error.message}`);
+        res.status(500).json({ status: 'Error', message: error.message });
+    });
+
+    stopServer.on('close', (code) => {
+        console.log(`Jupyter notebook server stopped with code ${code}`);
+        res.json({ status: 'OK' });
+    });
 });
 
 
