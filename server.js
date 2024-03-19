@@ -2,8 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const upload = multer({ dest: '/home/gl_user/submissions/' });
 const app = express();
-// const { exec } = require('child_process');
-// const { spawn } = require('child_process');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 const spawn = require('child_process').spawn;
@@ -31,6 +29,133 @@ app.get('/notebook', (req, res) => {
     `);
 });
 
+// Write an API to get notebook file and dataset file from request and run the notebook server using the dataset file and notebook file
+app.post('/run-notebook', upload.any(), async (req, res) => {
+    let notebookFile;
+    let datasetFile;
+    const username = req.body.username;
+
+    if (!username) {
+        console.error('Username not provided');
+        res.status(400).json({ status: 'Error', message: 'Username must be provided' });
+        return;
+    }
+
+    for (let i = 0; i < req.files.length; i++) {
+        if (req.files[i].fieldname === 'notebookFile') {
+            notebookFile = req.files[i];
+        } else if (req.files[i].fieldname === 'datasetFile') {
+            datasetFile = req.files[i];
+        }
+    }
+
+    if (notebookFile && datasetFile) {
+        console.log('Notebook File path:', notebookFile.path);
+        console.log('Dataset File path:', datasetFile.path);
+    } else {
+        if (!notebookFile) {
+            console.error('Notebook file not provided');
+        }
+        if (!datasetFile) {
+            console.error('Dataset file not provided');
+        }
+        res.status(400).json({ status: 'Error', message: 'Both a notebook file and a dataset file must be provided' });
+        return;
+    }
+
+    try {
+        await createUser(username);
+        await createDirectoryAndChangeOwnership(username);
+        await copyFile(datasetFile.path, `/home/${username}/submissions/dataset.csv`, 'dataset file');
+        await copyFile(notebookFile.path, `/home/${username}/submissions/notebook.ipynb`, 'notebook file');
+        await startJupyterServer(username);
+        res.json({ status: 'OK' });
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).json({ status: 'Error', message: error.message });
+        return;
+    }
+});
+
+app.post('/stop-notebook', (req, res) => {
+    console.log('Request body:', req.body);
+    console.log('Request body:', JSON.stringify(req.body));
+
+    const port = req.body.port;
+    const username = req.body.username;
+    if (!port) {
+        res.status(400).json({ status: 'Error', message: 'Port must be provided' });
+        return;
+    }
+
+    if (!username) {
+        res.status(400).json({ status: 'Error', message: 'Username must be provided' });
+        return;
+    }
+
+    console.log(`Stopping Jupyter notebook server on port ${port} for user ${username}...`);
+
+    const stopServer = spawn('/usr/bin/sudo', [
+        '-u', username, 'jupyter',
+        'notebook', 'stop', port
+    ]);
+
+    stopServer.stdout.on('data', (data) => {
+        console.log(`stdout: ${data}`);
+    });
+
+    stopServer.stderr.on('data', (data) => {
+        console.error(`stderr: ${data}`);
+    });
+
+    stopServer.on('error', (error) => {
+        console.error(`Error occurred while trying to stop Jupyter notebook server: ${error.message}`);
+        res.status(500).json({ status: 'Error', message: `Error occurred while trying to stop Jupyter notebook server: ${error.message}` });
+    });
+
+    stopServer.on('close', (code) => {
+        console.log(`Jupyter notebook server stopped with code ${code}`);
+        if (code === 0) {
+            res.json({ status: 'OK' });
+        } else {
+            res.status(500).json({ status: 'Error', message: `Failed to stop Jupyter notebook server. Exit code: ${code}` });
+        }
+    });
+
+});
+
+app.get('/list-notebooks', async (req, res) => {
+    const username = req.query.username;
+    if (!username) {
+        res.status(400).json({ status: 'Error', message: 'Username must be provided' });
+        return;
+    }
+
+    try {
+        console.log('username:', username);
+        const { stdout, stderr } = await exec(`sudo -u ${username} jupyter notebook list`);
+        if (stderr) {
+            console.error(`stderr: ${stderr}`);
+            if (stderr.includes('unknown user')) {
+                res.status(400).json({ status: 'Error', message: `The provided username '${username}' does not exist on the system.` });
+            } else {
+                res.status(500).json({ status: 'Error', message: stderr });
+            }
+            return;
+        }
+        console.log(`stdout: ${stdout}`);
+        res.json({ status: 'OK', data: stdout });
+    } catch (error) {
+        console.error(`Failed to list Jupyter notebook servers: ${error.message}`);
+        res.status(500).json({ status: 'Error', message: error.message });
+    }
+});
+
+app.listen(port, () => {
+    console.log(`Server is listening at http://localhost:${port}`);
+});
+
+
 
 async function createUser(username) {
     try {
@@ -43,17 +168,16 @@ async function createUser(username) {
     }
 }
 
-async function createDirectoryAndChangeOwnership() {
+async function createDirectoryAndChangeOwnership(username) {
     try {
-        await exec('mkdir -p /home/gl_user/submissions && sudo chown -R gl_user:gl_user /home/gl_user/submissions');
+        await exec(`mkdir -p /home/${username}/submissions && sudo chown -R ${username}:${username} /home/${username}/submissions`);
         console.log('Directory created and ownership changed');
     } catch (error) {
         throw new Error(`Failed to create directory or change ownership: ${error.message}`);
     }
 }
 
-async function startJupyterServer() {
-    const successMsg = 'To access the server, open this file in a browser:';
+async function startJupyterServer(username) {
     return new Promise((resolve, reject) => {
 
         // Additional parameters to be passed to the notebook server command
@@ -63,21 +187,15 @@ async function startJupyterServer() {
 
         // Concatenate the additional parameters with the existing parameters
         const notebookServerParams = [
-            '-u', 'gl_user', 'env', '-i', 'jupyter',
-            'notebook', '--ip=*', '--port=8888',
-            '--NotebookApp.notebook_dir=/home/gl_user/submissions',
+            '-u', username, 'env', '-i', 'jupyter',
+            'notebook', '--ip=*',
+            '--NotebookApp.notebook_dir=/home/' + username + '/submissions',
             '--NotebookApp.default_url=/notebooks/notebook.ipynb'
         ].concat(additionalParams);
 
         const notebookServer = spawn('/usr/bin/sudo', notebookServerParams);
 
-
-        // const notebookServer = spawn('/usr/bin/sudo', [
-        //     '-u', 'gl_user', 'env', '-i', 'jupyter',
-        //     'notebook', '--ip=*', '--port=8888',
-        //     '--NotebookApp.notebook_dir=/home/gl_user/submissions',
-        //     '--NotebookApp.default_url=/notebooks/notebook.ipynb'
-        // ]);
+        const successMsg = 'To access the server, open this file in a browser:';
 
         notebookServer.stderr.on('data', (data) => {
             console.debug(`Notebook: ${data}`);
@@ -112,53 +230,6 @@ async function startJupyterServer() {
 }
 
 
-// Write an API to get notebook file and dataset file from request and run the notebook server using the dataset file and notebook file
-app.post('/run-notebook', upload.any(), async (req, res) => {
-    let notebookFile;
-    let datasetFile;
-
-    for (let i = 0; i < req.files.length; i++) {
-        if (req.files[i].fieldname === 'notebookFile') {
-            notebookFile = req.files[i];
-        } else if (req.files[i].fieldname === 'datasetFile') {
-            datasetFile = req.files[i];
-        }
-    }
-
-    if (notebookFile && datasetFile) {
-        console.log('Notebook File path:', notebookFile.path);
-        console.log('Dataset File path:', datasetFile.path);
-    } else {
-        if (!notebookFile) {
-            console.error('Notebook file not provided');
-        }
-        if (!datasetFile) {
-            console.error('Dataset file not provided');
-        }
-        res.status(400).json({ status: 'Error', message: 'Both a notebook file and a dataset file must be provided' });
-        return;
-    }
-
-    console.log('Notebook File path:', notebookFile.path);
-    console.log('Dataset File path:', datasetFile.path);
-
-    copyFile(datasetFile.path, '/home/gl_user/submissions/dataset.csv', 'dataset file', res);
-    copyFile(notebookFile.path, '/home/gl_user/submissions/notebook.ipynb', 'notebook file', res);
-
-    try {
-        await createUser('gl_user');
-        await createDirectoryAndChangeOwnership();
-        await copyFile(datasetFile.path, '/home/gl_user/submissions/dataset.csv', 'dataset file');
-        await copyFile(notebookFile.path, '/home/gl_user/submissions/notebook.ipynb', 'notebook file');
-        await startJupyterServer();
-        res.json({ status: 'OK' });
-    } catch (error) {
-        console.error(error.message);
-        res.status(500).json({ status: 'Error', message: error.message });
-        return;
-    }
-});
-
 async function copyFile(sourcePath, destinationPath, fileName) {
     console.log(`Copying the ${fileName} to ${destinationPath} directory...`);
     try {
@@ -172,43 +243,3 @@ async function copyFile(sourcePath, destinationPath, fileName) {
         throw new Error(`Failed to copy ${fileName}: ${error.message}`);
     }
 }
-
-app.post('/stop-notebook', (req, res) => {
-    console.log('Request body:', req.body);
-    console.log('Request body:', JSON.stringify(req.body));
-
-    const port = req.body.port;
-    console.log(`Stopping Jupyter notebook server on port ${port}...`);
-
-    const stopServer = spawn('/usr/bin/sudo', [
-        '-u', 'gl_user', 'jupyter',
-        'notebook', 'stop', port
-    ]);
-
-
-    stopServer.stdout.on('data', (data) => {
-        console.log(`stdout: ${data}`);
-    });
-
-    stopServer.stderr.on('data', (data) => {
-        console.error(`stderr: ${data}`);
-    });
-
-    stopServer.on('error', (error) => {
-        console.error(`Failed to stop Jupyter notebook server: ${error.message}`);
-        res.status(500).json({ status: 'Error', message: error.message });
-    });
-
-    stopServer.on('close', (code) => {
-        console.log(`Jupyter notebook server stopped with code ${code}`);
-        if (code === 0) {
-            res.json({ status: 'OK' });
-        }
-        res.status(500).json({ status: 'Error', message: `Jupyter notebook server stopped with code ${code}` });
-    });
-});
-
-
-app.listen(port, () => {
-    console.log(`Server is listening at http://localhost:${port}`);
-});
