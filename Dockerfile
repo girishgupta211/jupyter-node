@@ -28,7 +28,8 @@ RUN npm install
 # add --no-cache to avoid caching
 COPY . /app 
 # COPY . /app
-COPY jupyter_notebook_config.py /root/.jupyter/
+# COPY jupyter_notebook_config.py /root/.jupyter/
+COPY jupyter_custom.js /root/.jupyter/custom/custom.js
 
 # Expose port for Node.js application
 EXPOSE 3015

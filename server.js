@@ -45,15 +45,19 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         console.log('Dataset File path:', datasetFile.path);
 
         await createUser(username);
-        await createDirectoryAndChangeOwnership(username);
+        await createDirectoryAndChangeOwnership(username, `/home/${username}/submissions`);
         await copyFile(datasetFile.path, `/home/${username}/submissions/dataset.csv`, 'dataset file');
         await copyFile(notebookFile.path, `/home/${username}/submissions/notebook.ipynb`, 'notebook file');
+        await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
+        await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config');
+
         await startJupyterServer(username);
         res.json({ status: 'OK' });
     } catch (error) {
         console.error(error.message);
         res.status(500).json({ status: 'Error', message: error.message });
     }
+    
 });
 
 app.post('/stop-notebook', (req, res) => {
@@ -172,9 +176,9 @@ async function createUser(username) {
     }
 }
 
-async function createDirectoryAndChangeOwnership(username) {
+async function createDirectoryAndChangeOwnership(username, directory) {
     try {
-        await exec(`mkdir -p /home/${username}/submissions && sudo chown -R ${username}:${username} /home/${username}/submissions`);
+        await exec(`mkdir -p ${directory} && sudo chown -R ${username}:${username} ${directory}`);
         console.log('Directory created and ownership changed');
     } catch (error) {
         throw new Error(`Failed to create directory or change ownership: ${error.message}`);
@@ -184,12 +188,10 @@ async function createDirectoryAndChangeOwnership(username) {
 async function startJupyterServer(username) {
     return new Promise((resolve, reject) => {
 
-        // Additional parameters to be passed to the notebook server command
         const additionalParams = [
             '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}'
         ];
 
-        // Concatenate the additional parameters with the existing parameters
         const notebookServerParams = [
             '-u', username, 'env', '-i', 'jupyter',
             'notebook', '--ip=*',
@@ -199,6 +201,7 @@ async function startJupyterServer(username) {
 
         const notebookServer = spawn('/usr/bin/sudo', notebookServerParams);
 
+        
         const successMsg = 'To access the server, open this file in a browser:';
 
         notebookServer.stderr.on('data', (data) => {
