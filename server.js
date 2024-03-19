@@ -5,7 +5,6 @@ const app = express();
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 const spawn = require('child_process').spawn;
-
 const bodyParser = require('body-parser');
 const os = require('os');
 
@@ -31,39 +30,20 @@ app.get('/notebook', (req, res) => {
 
 // Write an API to get notebook file and dataset file from request and run the notebook server using the dataset file and notebook file
 app.post('/run-notebook', upload.any(), async (req, res) => {
-    let notebookFile;
-    let datasetFile;
     const username = req.body.username;
 
     if (!username) {
-        console.error('Username not provided');
         res.status(400).json({ status: 'Error', message: 'Username must be provided' });
         return;
     }
 
-    for (let i = 0; i < req.files.length; i++) {
-        if (req.files[i].fieldname === 'notebookFile') {
-            notebookFile = req.files[i];
-        } else if (req.files[i].fieldname === 'datasetFile') {
-            datasetFile = req.files[i];
-        }
-    }
-
-    if (notebookFile && datasetFile) {
-        console.log('Notebook File path:', notebookFile.path);
-        console.log('Dataset File path:', datasetFile.path);
-    } else {
-        if (!notebookFile) {
-            console.error('Notebook file not provided');
-        }
-        if (!datasetFile) {
-            console.error('Dataset file not provided');
-        }
-        res.status(400).json({ status: 'Error', message: 'Both a notebook file and a dataset file must be provided' });
-        return;
-    }
+    const { notebookFile, datasetFile } = handleFileUpload(req);
 
     try {
+        validateFileUpload(notebookFile, datasetFile);
+        console.log('Notebook File path:', notebookFile.path);
+        console.log('Dataset File path:', datasetFile.path);
+
         await createUser(username);
         await createDirectoryAndChangeOwnership(username);
         await copyFile(datasetFile.path, `/home/${username}/submissions/dataset.csv`, 'dataset file');
@@ -73,7 +53,6 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
     } catch (error) {
         console.error(error.message);
         res.status(500).json({ status: 'Error', message: error.message });
-        return;
     }
 });
 
@@ -155,6 +134,31 @@ app.listen(port, () => {
     console.log(`Server is listening at http://localhost:${port}`);
 });
 
+// Function to handle file uploads
+function handleFileUpload(req) {
+    let notebookFile;
+    let datasetFile;
+
+    for (let i = 0; i < req.files.length; i++) {
+        if (req.files[i].fieldname === 'notebookFile') {
+            notebookFile = req.files[i];
+        } else if (req.files[i].fieldname === 'datasetFile') {
+            datasetFile = req.files[i];
+        }
+    }
+
+    return { notebookFile, datasetFile };
+}
+
+// Function to validate file uploads
+function validateFileUpload(notebookFile, datasetFile) {
+    if (!notebookFile) {
+        throw new Error('Notebook file not provided');
+    }
+    if (!datasetFile) {
+        throw new Error('Dataset file not provided');
+    }
+}
 
 
 async function createUser(username) {
