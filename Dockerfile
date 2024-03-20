@@ -8,7 +8,9 @@ RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm lib
 RUN apk add --no-cache sudo
 RUN pip install --upgrade pip
 # RUN pip install jupyter pandas numpy matplotlib seaborn scikit-learn
-RUN pip install jupyter
+# RUN pip install jupyter
+# RUN pip install jupyter==6.0.1
+RUN pip install notebook==6.0.1
 RUN pip install pandas
 RUN pip install numpy
 # RUN pip install matplotlib
@@ -28,8 +30,8 @@ RUN npm install
 # add --no-cache to avoid caching
 COPY . /app 
 # COPY . /app
-# COPY jupyter_notebook_config.py /root/.jupyter/
-COPY jupyter_custom.js /root/.jupyter/custom/custom.js
+COPY jupyter_notebook_config.py /root/.jupyter/
+COPY custom.js /root/.jupyter/custom/custom.js
 
 # Expose port for Node.js application
 EXPOSE 3015

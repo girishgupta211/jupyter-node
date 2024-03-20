@@ -21,11 +21,29 @@ app.get('/health', (req, res) => {
     res.json({ status: 'OK' });
 });
 
+// app.get('/notebook', (req, res) => {
+//     const token = req.query.token;
+//     res.send(`
+//       <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+//     `);
+// });
+
 app.get('/notebook', (req, res) => {
-    const token = req.query.token;
-    res.send(`
-      <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
-    `);
+        const token = req.query.token;
+        res.send(`
+            <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+            <script>
+                window.addEventListener('message', function(event) {
+                        // Check the origin of the message
+                        if (event.origin !== 'http://localhost:8888') {
+                                return;
+                        }
+
+                        // Process the message
+                        console.log('Received message from Jupyter notebook:', event.data);
+                }, false);
+            </script>
+        `);
 });
 
 // Write an API to get notebook file and dataset file from request and run the notebook server using the dataset file and notebook file
@@ -46,10 +64,12 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
 
         await createUser(username);
         await createDirectoryAndChangeOwnership(username, `/home/${username}/submissions`);
-        await copyFile(datasetFile.path, `/home/${username}/submissions/dataset.csv`, 'dataset file');
-        await copyFile(notebookFile.path, `/home/${username}/submissions/notebook.ipynb`, 'notebook file');
+        await copyFile(datasetFile.path, `/home/${username}/submissions/dataset.csv`, 'dataset file', username);
+        await copyFile(notebookFile.path, `/home/${username}/submissions/notebook.ipynb`, 'notebook file', username);
+        await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter`);
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
-        await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config');
+        await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
+        await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
 
         await startJupyterServer(username);
         res.json({ status: 'OK' });
@@ -57,7 +77,7 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         console.error(error.message);
         res.status(500).json({ status: 'Error', message: error.message });
     }
-    
+
 });
 
 app.post('/stop-notebook', (req, res) => {
@@ -179,6 +199,7 @@ async function createUser(username) {
 async function createDirectoryAndChangeOwnership(username, directory) {
     try {
         await exec(`mkdir -p ${directory} && sudo chown -R ${username}:${username} ${directory}`);
+
         console.log('Directory created and ownership changed');
     } catch (error) {
         throw new Error(`Failed to create directory or change ownership: ${error.message}`);
@@ -193,16 +214,19 @@ async function startJupyterServer(username) {
         ];
 
         const notebookServerParams = [
-            '-u', username, 'env', '-i', 'jupyter',
+            '-u', username, 'env', '-i',
+            'JUPYTER_CONFIG_DIR=/home/' + username + '/.jupyter',
+            'jupyter',
             'notebook', '--ip=*',
             '--NotebookApp.notebook_dir=/home/' + username + '/submissions',
             '--NotebookApp.default_url=/notebooks/notebook.ipynb'
-        ].concat(additionalParams);
+        ]
+            .concat(additionalParams);
 
         const notebookServer = spawn('/usr/bin/sudo', notebookServerParams);
 
-        
-        const successMsg = 'To access the server, open this file in a browser:';
+
+        const successMsg = 'To access the notebook, open this file in a browser:';
 
         notebookServer.stderr.on('data', (data) => {
             console.debug(`Notebook: ${data}`);
@@ -237,10 +261,10 @@ async function startJupyterServer(username) {
 }
 
 
-async function copyFile(sourcePath, destinationPath, fileName) {
+async function copyFile(sourcePath, destinationPath, fileName, username) {
     console.log(`Copying the ${fileName} to ${destinationPath} directory...`);
     try {
-        const { stdout, stderr } = await exec(`cp ${sourcePath} ${destinationPath}`);
+        const { stdout, stderr } = await exec(`cp ${sourcePath} ${destinationPath} && sudo chown ${username}:${username} ${destinationPath}`);
         if (stderr) {
             console.log(`stderr: ${stderr}`);
             return;
