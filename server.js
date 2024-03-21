@@ -66,15 +66,34 @@ app.get('/notebook', (req, res) => {
             setInterval(function () {
                 var idleTime = Math.floor((Date.now() - lastActiveTime) / 1000);
                 document.getElementById('timer').textContent = 'Last Active Before: ' + idleTime + ' seconds ago';
-            }, 1000);
+            }, 1000);  
 
-            // Add an event listener to the submit button
             document.getElementById('submit-button').addEventListener('click', function () {
                 // Send a message to the iframe
                 var iframe = document.getElementsByTagName('iframe')[0];
                 iframe.contentWindow.postMessage('Submit notebook', '*');
+
+                // Call the submit API
+                fetch('/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username: 'girish', port: '8888' }) // Replace 'username' and '8888' with the actual username and port
+                })
+                .then(response => response.blob())
+                .then(blob => {
+                    var url = window.URL.createObjectURL(blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'submissions.zip';
+                    document.body.appendChild(a); // we need to append the element to the dom -> otherwise it will not work in firefox
+                    a.click();    
+                    a.remove();  //afterwards we remove the element again         
+                });
             });
 
+            
             // Add an event listener for messages from the iframe
             window.addEventListener('message', function(event) {
                 // Check the origin of the message
