@@ -7,11 +7,14 @@ const exec = util.promisify(require('child_process').exec);
 const spawn = require('child_process').spawn;
 const bodyParser = require('body-parser');
 const os = require('os');
+const archiver = require('archiver');
+const fs = require('fs');
 
 const username = os.userInfo().username;
 console.log('Username:', username);
 app.use(bodyParser.json());
 const port = 3015;
+
 
 app.get('/', (req, res) => {
     res.send('Hello World!');
@@ -52,7 +55,7 @@ app.get('/notebook', (req, res) => {
         </style>
         <div id="timer">Last Active Before: 0 seconds ago</div>
         <div id="absolute-time">Last Active At: ${initialTime}</div>
-        
+
         <button id="submit-button">Submit Notebook</button>
         <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
@@ -170,6 +173,59 @@ app.post('/stop-notebook', (req, res) => {
         console.log(`Jupyter notebook server stopped with code ${code}`);
         if (code === 0) {
             res.json({ status: 'OK' });
+        } else {
+            res.status(500).json({ status: 'Error', message: `Failed to stop Jupyter notebook server. Exit code: ${code}` });
+        }
+    });
+
+});
+
+
+app.post('/submit', (req, res) => {
+    const username = req.body.username;
+    const port = req.body.port;
+
+    if (!username) {
+        res.status(400).json({ status: 'Error', message: 'Username must be provided' });
+        return;
+    }
+
+    const directoryPath = `/home/${username}/submissions`;
+    const output = fs.createWriteStream(`${username}_submissions.zip`);
+    const archive = archiver('zip', {
+        zlib: { level: 9 } // Sets the compression level.
+    });
+
+    output.on('close', function () {
+        console.log(archive.pointer() + ' total bytes');
+        console.log('archiver has been finalized and the output file descriptor has closed.');
+    });
+
+    archive.on('error', function (err) {
+        throw err;
+    });
+
+    archive.pipe(output);
+    archive.directory(directoryPath, false);
+    archive.finalize();
+
+    console.log(`Stopping Jupyter notebook server on port ${port} for user ${username}...`);
+
+    const stopServer = spawn('/usr/bin/sudo', [
+        '-u', username, 'jupyter',
+        'notebook', 'stop', port
+    ]);
+
+    stopServer.on('close', async (code) => {
+        console.log(`Jupyter notebook server stopped with code ${code}`);
+        if (code === 0) {
+            // const userDeleted = await deleteUser(username);
+            // if (userDeleted) {
+            res.sendFile(`${__dirname}/${username}_submissions.zip`);
+            // } else {
+            //     res.sendFile(`${__dirname}/${username}_submissions.zip`);
+            //     res.status(500).json({ status: 'Error', message: `Failed to delete user ${username}` });
+            // }
         } else {
             res.status(500).json({ status: 'Error', message: `Failed to stop Jupyter notebook server. Exit code: ${code}` });
         }
@@ -322,5 +378,14 @@ async function copyFile(sourcePath, destinationPath, fileName, username) {
         console.log(`stdout: ${stdout}`);
     } catch (error) {
         throw new Error(`Failed to copy ${fileName}: ${error.message}`);
+    }
+}
+
+async function deleteUser(username) {
+    const { stdout, stderr } = await exec(`sudo userdel -r ${username}`);
+    if (stderr) {
+        console.error(`Error deleting user: ${stderr}`);
+    } else {
+        console.log(`Deleted user: ${stdout}`);
     }
 }
