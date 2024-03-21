@@ -21,29 +21,54 @@ app.get('/health', (req, res) => {
     res.json({ status: 'OK' });
 });
 
-// app.get('/notebook', (req, res) => {
-//     const token = req.query.token;
-//     res.send(`
-//       <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
-//     `);
-// });
 
 app.get('/notebook', (req, res) => {
-        const token = req.query.token;
-        res.send(`
-            <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
-            <script>
-                window.addEventListener('message', function(event) {
-                        // Check the origin of the message
-                        if (event.origin !== 'http://localhost:8888') {
-                                return;
-                        }
+    const token = req.query.token;
+    res.send(`
+        <style>
+            /* ...existing styles... */
+        </style>
+        <div id="timer">Last active time: 0 seconds ago</div>
+        <div id="absolute-time">Absolute time: </div>
+        <button id="submit-button">Submit Notebook</button>
+        <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+        <script>
+            // Initialize the last active time
+            var lastActiveTime = Date.now();
 
-                        // Process the message
-                        console.log('Received message from Jupyter notebook:', event.data);
-                }, false);
-            </script>
-        `);
+            // Add an event listener to the submit button
+            document.getElementById('submit-button').addEventListener('click', function () {
+                // Send a message to the iframe
+                var iframe = document.getElementsByTagName('iframe')[0];
+                iframe.contentWindow.postMessage('Submit notebook', '*');
+            });
+
+            // Add an event listener for messages from the iframe
+            window.addEventListener('message', function(event) {
+                // Check the origin of the message
+                if (event.origin !== 'http://localhost:8888') {
+                    return;
+                }
+
+                // Process the message
+                console.log('Received message from Jupyter notebook:', event.data);
+
+                // Check if the message indicates that there was activity in the child window
+                if (event.data.startsWith("Last activity time: ")) {
+                    // Update the last active time
+                    lastActiveTime = Date.now();
+
+                    // Update the timer div with the last active time
+                    var idleTime = Math.floor((Date.now() - lastActiveTime) / 1000);
+                    document.getElementById('timer').textContent = 'Last active time: ' + idleTime + ' seconds ago';
+
+                    // Update the absolute time div with the absolute time of the last activity
+                    var absoluteTime = new Date(lastActiveTime).toString();
+                    document.getElementById('absolute-time').textContent = 'Absolute time: ' + absoluteTime;
+                }
+            }, false);
+        </script>
+    `);
 });
 
 // Write an API to get notebook file and dataset file from request and run the notebook server using the dataset file and notebook file
