@@ -16,32 +16,6 @@ $(document).ready(function () {
     // var inactivityAlertTime = 60000; // Time in milliseconds, 60000ms = 1 minute
     // // var longRunningAlertTime = 200000; // Time in milliseconds, 200000ms = 2 minutes
 
-    // // Reset the timers whenever there's activity in the notebook
-    // $(document).on('mousemove keypress', function () {
-    //     clearTimeout(inactivityTimer);
-    //     lastActivityTime = Date.now();
-    //     inactivityTimer = setTimeout(function () {
-    //         // Check if a code cell is executing
-    //         if (Jupyter.notebook.kernel_busy) {
-    //             console.log("Code cell is executing");
-    //             return;
-    //         }
-
-    //         // Calculate the idle time
-    //         var idleTime = Date.now() - lastActivityTime;
-
-    //         // Alert the user
-    //         alert("No activity detected in the Jupyter notebook for " + (idleTime / 1000) + " seconds");
-
-    //         // Log a message to the console
-    //         console.log("No activity in Jupyter notebook");
-
-    //         // Send a message to the parent window
-    //         if (window.parent) {
-    //             window.parent.postMessage("No activity in Jupyter notebook for " + (idleTime / 1000) + " seconds", "*");
-    //         }
-    //     }, inactivityAlertTime);
-
     //     // longRunningTimer = setTimeout(function () {
     //     //     // Alert the user
     //     //     alert("A code cell has been running for 2 minutes");
@@ -59,9 +33,18 @@ $(document).ready(function () {
     var inactivityTimer;
     var lastActivityTime = Date.now();
     var inactivityAlertTime = 60000; // Time in milliseconds, 60000ms = 1 minute
+    var debounceTimer;
+
+    // Debounce function
+    function debounce(func, wait) {
+        return function () {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(func, wait);
+        }
+    }
 
     // Reset the timer and update the last activity time whenever there's activity in the notebook
-    $(document).on('mousemove keypress', function () {
+    $(document).on('mousemove keypress click scroll', function () {
         clearTimeout(inactivityTimer);
         lastActivityTime = Date.now();
         inactivityTimer = setTimeout(function () {
@@ -86,10 +69,29 @@ $(document).ready(function () {
             }
         }, inactivityAlertTime);
 
-        // Send the last activity time to the parent window
-        if (window.parent) {
-            window.parent.postMessage("Last activity time: " + lastActivityTime, "*");
-        }
+        // Debounce the sending of the last activity time to the parent window
+        debounce(function () {
+            if (window.parent) {
+                window.parent.postMessage("Last activity time: " + lastActivityTime, "*");
+            }
+        }, 5000)(); // Debounce time is 5000ms = 5 seconds
     });
 
 });
+
+// define(['base/js/namespace'], function (Jupyter) {
+//     function disableFileMenu() {
+//         Jupyter.notebook.keyboard_manager.command_shortcuts.remove_shortcut('f');
+//         Jupyter.notebook.keyboard_manager.edit_shortcuts.remove_shortcut('f');
+//         $('#file_menu').parent().remove();
+//     }
+
+//     return {
+//         onload: function () {
+//             if (Jupyter.notebook !== undefined) {
+//                 disableFileMenu();
+//             }
+//             Jupyter.events.on("kernel_ready.Kernel", disableFileMenu);
+//         }
+//     };
+// });

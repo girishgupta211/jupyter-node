@@ -23,6 +23,8 @@ app.get('/health', (req, res) => {
 
 app.get('/notebook', (req, res) => {
     const token = req.query.token;
+    const initialTime = new Date().toString();
+
     res.send(`
         <style>
             body {
@@ -49,7 +51,8 @@ app.get('/notebook', (req, res) => {
             }
         </style>
         <div id="timer">Last Active Before: 0 seconds ago</div>
-        <div id="absolute-time">Last Active At: </div>
+        <div id="absolute-time">Last Active At: ${initialTime}</div>
+        
         <button id="submit-button">Submit Notebook</button>
         <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
