@@ -36,6 +36,12 @@ app.get('/notebook', (req, res) => {
             // Initialize the last active time
             var lastActiveTime = Date.now();
 
+            // Update the timer div with the last active time every second
+            setInterval(function () {
+                var idleTime = Math.floor((Date.now() - lastActiveTime) / 1000);
+                document.getElementById('timer').textContent = 'Last active time: ' + idleTime + ' seconds ago';
+            }, 1000);
+
             // Add an event listener to the submit button
             document.getElementById('submit-button').addEventListener('click', function () {
                 // Send a message to the iframe
@@ -57,10 +63,6 @@ app.get('/notebook', (req, res) => {
                 if (event.data.startsWith("Last activity time: ")) {
                     // Update the last active time
                     lastActiveTime = Date.now();
-
-                    // Update the timer div with the last active time
-                    var idleTime = Math.floor((Date.now() - lastActiveTime) / 1000);
-                    document.getElementById('timer').textContent = 'Last active time: ' + idleTime + ' seconds ago';
 
                     // Update the absolute time div with the absolute time of the last activity
                     var absoluteTime = new Date(lastActiveTime).toString();
