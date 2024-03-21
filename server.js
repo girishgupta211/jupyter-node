@@ -21,15 +21,35 @@ app.get('/health', (req, res) => {
     res.json({ status: 'OK' });
 });
 
-
 app.get('/notebook', (req, res) => {
     const token = req.query.token;
     res.send(`
         <style>
-            /* ...existing styles... */
+            body {
+                padding: 20px;
+                font-family: Arial, sans-serif;
+            }
+            #timer, #absolute-time {
+                margin-bottom: 10px;
+                font-size: 18px;
+                font-weight: bold;
+                color: #333;
+            }
+            #submit-button {
+                background-color: #4CAF50; /* Green */
+                border: none;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 16px;
+                margin: 4px 2px;
+                cursor: pointer;
+            }
         </style>
-        <div id="timer">Last active time: 0 seconds ago</div>
-        <div id="absolute-time">Absolute time: </div>
+        <div id="timer">Last Active Before: 0 seconds ago</div>
+        <div id="absolute-time">Last Active At: </div>
         <button id="submit-button">Submit Notebook</button>
         <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
@@ -39,7 +59,7 @@ app.get('/notebook', (req, res) => {
             // Update the timer div with the last active time every second
             setInterval(function () {
                 var idleTime = Math.floor((Date.now() - lastActiveTime) / 1000);
-                document.getElementById('timer').textContent = 'Last active time: ' + idleTime + ' seconds ago';
+                document.getElementById('timer').textContent = 'Last Active Before: ' + idleTime + ' seconds ago';
             }, 1000);
 
             // Add an event listener to the submit button
@@ -66,7 +86,7 @@ app.get('/notebook', (req, res) => {
 
                     // Update the absolute time div with the absolute time of the last activity
                     var absoluteTime = new Date(lastActiveTime).toString();
-                    document.getElementById('absolute-time').textContent = 'Absolute time: ' + absoluteTime;
+                    document.getElementById('absolute-time').textContent = 'Last Active At: ' + absoluteTime;
                 }
             }, false);
         </script>
