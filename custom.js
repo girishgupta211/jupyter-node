@@ -79,19 +79,39 @@ $(document).ready(function () {
 
 });
 
-// define(['base/js/namespace'], function (Jupyter) {
-//     function disableFileMenu() {
-//         Jupyter.notebook.keyboard_manager.command_shortcuts.remove_shortcut('f');
-//         Jupyter.notebook.keyboard_manager.edit_shortcuts.remove_shortcut('f');
-//         $('#file_menu').parent().remove();
-//     }
+define(["base/js/namespace", "base/js/promises"], function (Jupyter, promises) {
 
-//     return {
-//         onload: function () {
-//             if (Jupyter.notebook !== undefined) {
-//                 disableFileMenu();
-//             }
-//             Jupyter.events.on("kernel_ready.Kernel", disableFileMenu);
-//         }
-//     };
-// });
+    function disableFileMenu() {
+        // Log the start of the function
+        console.log('Disabling file menu...');
+
+        // Select the File menu
+        console.log('Selecting file menu...');
+        var fileMenu = $('#filelink');
+
+        // If the File menu is found, remove it
+        if (fileMenu.length > 0) {
+            console.log('File menu found, removing...');
+            fileMenu.parent().remove();
+        } else {
+            console.log('File menu not found');
+        }
+
+        // Remove the 'f' shortcut from command mode
+        console.log('Removing command shortcut...');
+        Jupyter.notebook.keyboard_manager.command_shortcuts.remove_shortcut('f');
+
+        // Remove the 'f' shortcut from edit mode
+        console.log('Removing edit shortcut...');
+        Jupyter.notebook.keyboard_manager.edit_shortcuts.remove_shortcut('f');
+    }
+
+    promises.notebook_loaded.then(function () {
+        console.log('Notebook loaded...');
+        Jupyter.notebook.set_autosave_interval(10000);
+        if (Jupyter.notebook !== undefined) {
+            setTimeout(disableFileMenu, 1000);  // Delay execution by 1 second
+        }
+    });
+});
+
