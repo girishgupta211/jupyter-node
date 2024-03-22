@@ -6,6 +6,7 @@ FROM python:3-alpine
 # RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm libffi-dev freetype-dev libpng-dev zlib-dev
 RUN apk add --no-cache gcc musl-dev linux-headers g++ python3-dev nodejs npm libffi-dev freetype-dev libpng-dev zlib-dev jpeg-dev openjpeg-dev tiff-dev tk-dev tcl-dev harfbuzz-dev fribidi-dev
 RUN apk add --no-cache sudo
+RUN apk add --no-cache git
 RUN pip install --upgrade pip
 # RUN pip install jupyter pandas numpy matplotlib seaborn scikit-learn
 # RUN pip install jupyter
