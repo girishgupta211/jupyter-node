@@ -97,6 +97,19 @@ define(["base/js/namespace", "base/js/promises"], function (Jupyter, promises) {
             console.log('File menu not found');
         }
 
+
+        // Select the Logout button
+        console.log('Selecting logout button...');
+        var logoutButton = $('#logout');
+
+        // If the Logout button is found, hide it
+        if (logoutButton.length > 0) {
+            console.log('Logout button found, removing...');
+            logoutButton.remove();
+        } else {
+            console.log('Logout button not found');
+        }
+
         // Remove the 'f' shortcut from command mode
         console.log('Removing command shortcut...');
         Jupyter.notebook.keyboard_manager.command_shortcuts.remove_shortcut('f');
