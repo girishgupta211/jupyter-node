@@ -142,8 +142,13 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
         await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
+        await trustNotebook(username);
+        console.log('Notebook trusted successfully');
 
         await startJupyterServer(username);
+        console.log('Jupyter server started successfully');
+
+
         res.json({ status: 'OK' });
     } catch (error) {
         console.error(error.message);
@@ -344,12 +349,12 @@ async function startJupyterServer(username) {
             'jupyter',
             'notebook', '--ip=*',
             '--NotebookApp.notebook_dir=/home/' + username + '/submissions',
-            '--NotebookApp.default_url=/notebooks/notebook.ipynb'
+            '--NotebookApp.default_url=/notebooks/notebook.ipynb',
+            '--NotebookApp.trust_xheaders=True'
         ]
             .concat(additionalParams);
 
         const notebookServer = spawn('/usr/bin/sudo', notebookServerParams);
-
 
         const successMsg = 'To access the notebook, open this file in a browser:';
 
@@ -385,6 +390,35 @@ async function startJupyterServer(username) {
     });
 }
 
+async function trustNotebook(username) {
+    return new Promise((resolve, reject) => {
+        const trustNotebookParams = [
+            '-u', username,
+            'JUPYTER_CONFIG_DIR=/home/' + username + '/.jupyter',
+            'jupyter',
+            'trust', '/home/' + username + '/submissions/notebook.ipynb'
+        ];
+
+        const trustNotebook = spawn('/usr/bin/sudo', trustNotebookParams);
+
+        trustNotebook.on('close', (code) => {
+            console.log(`Trusted notebook exited with code ${code}`);
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`Trusted notebook exited with code ${code}`));
+            }
+        });
+
+        trustNotebook.stderr.on('data', (data) => {
+            console.error(`Trust notebook: ${data}`);
+        });
+
+        trustNotebook.stdout.on('data', (data) => {
+            console.log(`Trust notebook: ${data}`);
+        });
+    });
+}
 
 async function copyFile(sourcePath, destinationPath, fileName, username) {
     console.log(`Copying the ${fileName} to ${destinationPath} directory...`);
