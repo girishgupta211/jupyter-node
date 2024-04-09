@@ -142,14 +142,10 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
         await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
-        await trustNotebook(username);
-        console.log('Notebook trusted successfully');
 
-        await startJupyterServer(username);
-        console.log('Jupyter server started successfully');
+        let notebookUrl = await startJupyterServer(username);
+        res.json({ status: 'OK', url: notebookUrl });
 
-
-        res.json({ status: 'OK' });
     } catch (error) {
         console.error(error.message);
         res.status(500).json({ status: 'Error', message: error.message });
@@ -340,39 +336,36 @@ async function startJupyterServer(username) {
     return new Promise((resolve, reject) => {
 
         const additionalParams = [
-            '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}'
-        ];
+            '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}',
+            '--port=3000'
+        ];        
 
         const notebookServerParams = [
             '-u', username, 'env', '-i',
             'JUPYTER_CONFIG_DIR=/home/' + username + '/.jupyter',
-            'jupyter',
+            '/usr/local/bin/jupyter',
             'notebook', '--ip=*',
             '--NotebookApp.notebook_dir=/home/' + username + '/submissions',
-            '--NotebookApp.default_url=/notebooks/notebook.ipynb',
-            '--NotebookApp.trust_xheaders=True'
+            '--NotebookApp.default_url=/notebooks/notebook.ipynb'
         ]
             .concat(additionalParams);
 
         const notebookServer = spawn('/usr/bin/sudo', notebookServerParams);
 
         const successMsg = 'To access the notebook, open this file in a browser:';
+        let notebookUrl = '';
 
-        notebookServer.stderr.on('data', (data) => {
-            console.debug(`Notebook: ${data}`);
-            if (data.includes(successMsg)) {
+        const extractUrl = (data) => {
+            const dataStr = data.toString();
+            if (dataStr.includes(successMsg)) {
                 console.log('Jupyter notebook server started successfully');
-                resolve();
+                notebookUrl = dataStr.split(successMsg)[1].trim();
+                resolve(notebookUrl);
             }
-        });
+        };
 
-        notebookServer.stdout.on('data', (data) => {
-            console.debug(`Notebook: ${data}`);
-            if (data.includes(successMsg)) {
-                console.log('Jupyter notebook server started successfully');
-                resolve();
-            }
-        });
+        notebookServer.stderr.on('data', extractUrl);
+        notebookServer.stdout.on('data', extractUrl);
 
         notebookServer.on('error', (error) => {
             console.error(`Failed to start Jupyter notebook server: ${error.message}`);
@@ -381,41 +374,9 @@ async function startJupyterServer(username) {
 
         notebookServer.on('close', (code) => {
             console.log(`Jupyter notebook server exited with code ${code}`);
-            if (code === 0) {
-                resolve();
-            } else {
+            if (code !== 0) {
                 reject(new Error(`Jupyter notebook server exited with code ${code}`));
             }
-        });
-    });
-}
-
-async function trustNotebook(username) {
-    return new Promise((resolve, reject) => {
-        const trustNotebookParams = [
-            '-u', username,
-            'JUPYTER_CONFIG_DIR=/home/' + username + '/.jupyter',
-            'jupyter',
-            'trust', '/home/' + username + '/submissions/notebook.ipynb'
-        ];
-
-        const trustNotebook = spawn('/usr/bin/sudo', trustNotebookParams);
-
-        trustNotebook.on('close', (code) => {
-            console.log(`Trusted notebook exited with code ${code}`);
-            if (code === 0) {
-                resolve();
-            } else {
-                reject(new Error(`Trusted notebook exited with code ${code}`));
-            }
-        });
-
-        trustNotebook.stderr.on('data', (data) => {
-            console.error(`Trust notebook: ${data}`);
-        });
-
-        trustNotebook.stdout.on('data', (data) => {
-            console.log(`Trust notebook: ${data}`);
         });
     });
 }

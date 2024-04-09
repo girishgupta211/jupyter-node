@@ -42,6 +42,7 @@ EXPOSE 8888
 EXPOSE 8889
 EXPOSE 8890
 EXPOSE 8891
+EXPOSE 3000
 EXPOSE 8892
 # Command to run the Node.js server
 CMD ["node", "server.js"]
