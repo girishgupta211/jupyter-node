@@ -8,7 +8,9 @@ const spawn = require('child_process').spawn;
 const bodyParser = require('body-parser');
 const os = require('os');
 const archiver = require('archiver');
+const axios = require('axios');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 
 const username = os.userInfo().username;
 console.log('Username:', username);
@@ -57,7 +59,7 @@ app.get('/notebook', (req, res) => {
         <div id="absolute-time">Last Active At: ${initialTime}</div>
 
         <button id="submit-button">Submit Notebook</button>
-        <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+        <iframe src="http://localhost:8080/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
             // Initialize the last active time
             var lastActiveTime = Date.now();
@@ -79,7 +81,7 @@ app.get('/notebook', (req, res) => {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username: 'girish', port: '8888' }) // Replace 'username' and '8888' with the actual username and port
+                    body: JSON.stringify({ username: 'girish', port: '8080' }) // Replace 'username' and '8080' with the actual username and port
                 })
                 .then(response => response.blob())
                 .then(blob => {
@@ -97,7 +99,7 @@ app.get('/notebook', (req, res) => {
             // Add an event listener for messages from the iframe
             window.addEventListener('message', function(event) {
                 // Check the origin of the message
-                if (event.origin !== 'http://localhost:8888') {
+                if (event.origin !== 'http://localhost:8080') {
                     return;
                 }
 
@@ -153,6 +155,43 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
 
 });
 
+app.post('/run-notebook-signed-url', async (req, res) => {
+    console.log('Request body:', req.body);
+    console.log('Request body:', JSON.stringify(req.body));
+    const username = req.body.username;
+    const notebookUrl = req.body.notebookUrl;
+    const datasetUrl = req.body.datasetUrl;
+
+    if (!username || !notebookUrl || !datasetUrl) {
+        res.status(400).json({ status: 'Error', message: 'Username, notebookUrl, and datasetUrl must be provided' });
+        return;
+    }
+
+    try {
+        await createUser(username);
+        await createDirectoryAndChangeOwnership(username, `/home/${username}/submissions`);
+        await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter`);
+        await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
+        await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
+        await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
+
+        // Download the notebook file
+        const notebookResponse = await axios.get(notebookUrl, { responseType: 'arraybuffer' });
+        await fsPromises.writeFile(`/home/${username}/submissions/notebook.ipynb`, notebookResponse.data);
+
+        // Download the dataset file
+        const datasetResponse = await axios.get(datasetUrl, { responseType: 'arraybuffer' });
+        await fsPromises.writeFile(`/home/${username}/submissions/dataset.csv`, datasetResponse.data);
+
+        let notebookServerUrl = await startJupyterServer(username);
+        res.json({ status: 'OK', url: notebookServerUrl });
+
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).json({ status: 'Error', message: error.message });
+    }
+});
+
 app.post('/stop-notebook', (req, res) => {
     console.log('Request body:', req.body);
     console.log('Request body:', JSON.stringify(req.body));
@@ -199,7 +238,6 @@ app.post('/stop-notebook', (req, res) => {
     });
 
 });
-
 
 app.post('/submit', (req, res) => {
     const username = req.body.username;
@@ -337,7 +375,8 @@ async function startJupyterServer(username) {
 
         const additionalParams = [
             '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}',
-            '--port=3000'
+            '--port=8080',
+            '--NotebookApp.port_retries=0'
         ];        
 
         const notebookServerParams = [

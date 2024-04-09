@@ -38,7 +38,7 @@ COPY custom.js /root/.jupyter/custom/custom.js
 EXPOSE 3015
 
 # Expose port for Jupyter Notebook
-EXPOSE 8888
+EXPOSE 8080
 EXPOSE 8889
 EXPOSE 8890
 EXPOSE 8891
