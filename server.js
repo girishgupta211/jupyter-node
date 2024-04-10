@@ -178,7 +178,9 @@ app.post('/run-notebook-signed-url', async (req, res) => {
 
         try {
             const notebookResponse = await axios.get(notebookUrl, { responseType: 'arraybuffer' });
-            await fsPromises.writeFile(`/home/${username}/submissions/notebook.ipynb`, notebookResponse.data);
+            const notebookPath = `/home/${username}/submissions/notebook.ipynb`;
+            await fsPromises.writeFile(notebookPath, notebookResponse.data);
+            await exec(`chown ${username}:${username} ${notebookPath}`);
         } catch (error) {
             if (error.response && error.response.status === 403) {
                 console.error(`Failed to download notebook file: The signed URL is expired`);
@@ -193,7 +195,9 @@ app.post('/run-notebook-signed-url', async (req, res) => {
             try {
                 const datasetResponse = await axios.get(datasetUrls[i], { responseType: 'arraybuffer' });
                 const filename = datasetUrls[i].split('/').pop().split('?')[0];
-                await fsPromises.writeFile(`/home/${username}/submissions/${filename}`, datasetResponse.data);
+                const datasetPath = `/home/${username}/submissions/${filename}`;
+                await fsPromises.writeFile(datasetPath, datasetResponse.data);
+                await exec(`chown ${username}:${username} ${datasetPath}`);
             } catch (error) {
                 if (error.response && error.response.status === 403) {
                     console.error(`Failed to download dataset file: The signed URL is expired`);
@@ -398,9 +402,10 @@ async function startJupyterServer(username) {
     return new Promise((resolve, reject) => {
 
         const additionalParams = [
-            '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}',
-            '--port=8080',
-            '--NotebookApp.port_retries=0'
+            '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}', // Configure Content Security Policy to allow embedding notebook in frames
+            '--port=8080', // Set the port number for the Jupyter Notebook server
+            '--NotebookApp.port_retries=0', // Disable port retries
+            // '--NotebookApp.disable_nbextensions_configurator=true' // Disable nbextensions configurator
         ];
 
         const notebookServerParams = [
