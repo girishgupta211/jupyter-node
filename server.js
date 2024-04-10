@@ -160,10 +160,10 @@ app.post('/run-notebook-signed-url', async (req, res) => {
     console.log('Request body:', JSON.stringify(req.body));
     const username = req.body.username;
     const notebookUrl = req.body.notebookUrl;
-    const datasetUrl = req.body.datasetUrl;
+    const datasetUrls = req.body.datasetUrls;
 
-    if (!username || !notebookUrl || !datasetUrl) {
-        res.status(400).json({ status: 'Error', message: 'Username, notebookUrl, and datasetUrl must be provided' });
+    if (!username || !notebookUrl || !datasetUrls) {
+        res.status(400).json({ status: 'Error', message: 'Username, notebookUrl, and datasetUrls must be provided' });
         return;
     }
 
@@ -178,10 +178,12 @@ app.post('/run-notebook-signed-url', async (req, res) => {
         // Download the notebook file
         const notebookResponse = await axios.get(notebookUrl, { responseType: 'arraybuffer' });
         await fsPromises.writeFile(`/home/${username}/submissions/notebook.ipynb`, notebookResponse.data);
-
-        // Download the dataset file
-        const datasetResponse = await axios.get(datasetUrl, { responseType: 'arraybuffer' });
-        await fsPromises.writeFile(`/home/${username}/submissions/dataset.csv`, datasetResponse.data);
+        
+        for (let i = 0; i < datasetUrls.length; i++) {
+            const datasetResponse = await axios.get(datasetUrls[i], { responseType: 'arraybuffer' });
+            const filename = datasetUrls[i].split('/').pop().split('?')[0];
+            await fsPromises.writeFile(`/home/${username}/submissions/${filename}`, datasetResponse.data);
+        }
 
         let notebookServerUrl = await startJupyterServer(username);
         res.json({ status: 'OK', url: notebookServerUrl });
@@ -191,6 +193,7 @@ app.post('/run-notebook-signed-url', async (req, res) => {
         res.status(500).json({ status: 'Error', message: error.message });
     }
 });
+
 
 app.post('/stop-notebook', (req, res) => {
     console.log('Request body:', req.body);
@@ -377,7 +380,7 @@ async function startJupyterServer(username) {
             '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}',
             '--port=8080',
             '--NotebookApp.port_retries=0'
-        ];        
+        ];
 
         const notebookServerParams = [
             '-u', username, 'env', '-i',
@@ -408,12 +411,14 @@ async function startJupyterServer(username) {
 
         notebookServer.on('error', (error) => {
             console.error(`Failed to start Jupyter notebook server: ${error.message}`);
+            console.error(`Error stack: ${error.stack}`);
             reject(error);
         });
 
-        notebookServer.on('close', (code) => {
-            console.log(`Jupyter notebook server exited with code ${code}`);
+        notebookServer.on('close', (code, signal) => {
+            console.log(`Jupyter notebook server exited with code ${code} and signal ${signal}`);
             if (code !== 0) {
+                console.error(`Jupyter notebook server failed to start. Exited with code ${code} and signal ${signal}`);
                 reject(new Error(`Jupyter notebook server exited with code ${code}`));
             }
         });
