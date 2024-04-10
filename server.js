@@ -145,8 +145,8 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
         await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
 
-        let notebookUrl = await startJupyterServer(username);
-        res.json({ status: 'OK', url: notebookUrl });
+        let notebookServerDetails = await startJupyterServer(username);
+        res.json({ ...notebookServerDetails });
 
     } catch (error) {
         console.error(error.message);
@@ -175,18 +175,38 @@ app.post('/run-notebook-signed-url', async (req, res) => {
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
         await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
 
-        // Download the notebook file
-        const notebookResponse = await axios.get(notebookUrl, { responseType: 'arraybuffer' });
-        await fsPromises.writeFile(`/home/${username}/submissions/notebook.ipynb`, notebookResponse.data);
-        
+
+        try {
+            const notebookResponse = await axios.get(notebookUrl, { responseType: 'arraybuffer' });
+            await fsPromises.writeFile(`/home/${username}/submissions/notebook.ipynb`, notebookResponse.data);
+        } catch (error) {
+            if (error.response && error.response.status === 403) {
+                console.error(`Failed to download notebook file: The signed URL is expired`);
+                res.status(403).json({ status: 'Error', message: 'The signed URL for the notebook file is expired' });
+                return;
+            } else {
+                throw error;
+            }
+        }
+
         for (let i = 0; i < datasetUrls.length; i++) {
-            const datasetResponse = await axios.get(datasetUrls[i], { responseType: 'arraybuffer' });
-            const filename = datasetUrls[i].split('/').pop().split('?')[0];
-            await fsPromises.writeFile(`/home/${username}/submissions/${filename}`, datasetResponse.data);
+            try {
+                const datasetResponse = await axios.get(datasetUrls[i], { responseType: 'arraybuffer' });
+                const filename = datasetUrls[i].split('/').pop().split('?')[0];
+                await fsPromises.writeFile(`/home/${username}/submissions/${filename}`, datasetResponse.data);
+            } catch (error) {
+                if (error.response && error.response.status === 403) {
+                    console.error(`Failed to download dataset file: The signed URL is expired`);
+                    res.status(403).json({ status: 'Error', message: 'The signed URL is expired' });
+                    return;
+                } else {
+                    throw error;
+                }
+            }
         }
 
         let notebookServerUrl = await startJupyterServer(username);
-        res.json({ status: 'OK', url: notebookServerUrl });
+        res.json({ ...notebookServerUrl });
 
     } catch (error) {
         console.error(error.message);
@@ -373,6 +393,7 @@ async function createDirectoryAndChangeOwnership(username, directory) {
     }
 }
 
+
 async function startJupyterServer(username) {
     return new Promise((resolve, reject) => {
 
@@ -395,14 +416,22 @@ async function startJupyterServer(username) {
         const notebookServer = spawn('/usr/bin/sudo', notebookServerParams);
 
         const successMsg = 'To access the notebook, open this file in a browser:';
-        let notebookUrl = '';
 
         const extractUrl = (data) => {
-            const dataStr = data.toString();
-            if (dataStr.includes(successMsg)) {
-                console.log('Jupyter notebook server started successfully');
-                notebookUrl = dataStr.split(successMsg)[1].trim();
-                resolve(notebookUrl);
+            try {
+                const dataStr = data.toString();
+                const keyword = 'http://127.0.0.1';
+                if (dataStr.includes(keyword) && dataStr.includes(successMsg)) {
+                    const url = dataStr.split(keyword)[1].split('\n')[0].trim();
+                    let token = '';
+                    if (url.includes('token=')) {
+                        token = url.split('token=')[1].split('&')[0];
+                    }
+                    resolve({ token: token, output: dataStr });
+                }
+            } catch (error) {
+                console.error(`Failed to extract URL: ${error.message}`);
+                reject(error);
             }
         };
 
