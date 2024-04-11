@@ -266,6 +266,35 @@ app.post('/stop-notebook', (req, res) => {
 
 });
 
+
+app.get('/list-notebooks', async (req, res) => {
+    const username = req.query.username;
+    if (!username) {
+        res.status(400).json({ status: 'Error', message: 'Username must be provided' });
+        return;
+    }
+
+    try {
+        console.log('username:', username);
+        const { stdout, stderr } = await exec(`sudo -u ${username} jupyter notebook list`);
+        if (stderr) {
+            console.error(`stderr: ${stderr}`);
+            if (stderr.includes('unknown user')) {
+                res.status(400).json({ status: 'Error', message: `The provided username '${username}' does not exist on the system.` });
+            } else {
+                res.status(500).json({ status: 'Error', message: stderr });
+            }
+            return;
+        }
+        console.log(`stdout: ${stdout}`);
+        res.json({ status: 'OK', data: stdout });
+    } catch (error) {
+        console.error(`Failed to list Jupyter notebook servers: ${error.message}`);
+        res.status(500).json({ status: 'Error', message: error.message });
+    }
+});
+
+
 app.post('/submit', (req, res) => {
     const username = req.body.username;
     const port = req.body.port;
@@ -318,31 +347,40 @@ app.post('/submit', (req, res) => {
 
 });
 
-app.get('/list-notebooks', async (req, res) => {
-    const username = req.query.username;
+app.post('/get-dataset', (req, res) => {
+    const username = req.body.username;
+    const port = req.body.port;
+
     if (!username) {
         res.status(400).json({ status: 'Error', message: 'Username must be provided' });
         return;
     }
 
-    try {
-        console.log('username:', username);
-        const { stdout, stderr } = await exec(`sudo -u ${username} jupyter notebook list`);
-        if (stderr) {
-            console.error(`stderr: ${stderr}`);
-            if (stderr.includes('unknown user')) {
-                res.status(400).json({ status: 'Error', message: `The provided username '${username}' does not exist on the system.` });
-            } else {
-                res.status(500).json({ status: 'Error', message: stderr });
-            }
-            return;
-        }
-        console.log(`stdout: ${stdout}`);
-        res.json({ status: 'OK', data: stdout });
-    } catch (error) {
-        console.error(`Failed to list Jupyter notebook servers: ${error.message}`);
-        res.status(500).json({ status: 'Error', message: error.message });
-    }
+    const directoryPath = `/home/${username}/submissions`;
+    const output = fs.createWriteStream(`${username}_submissions.zip`);
+    const archive = archiver('zip', {
+        zlib: { level: 9 } // Sets the compression level.
+    });
+
+    output.on('close', function () {
+        console.log(archive.pointer() + ' total bytes');
+        console.log('archiver has been finalized and the output file descriptor has closed.');
+    
+        // Send the file after the archiving process has completed
+        res.sendFile(`${__dirname}/${username}_submissions.zip`);
+    });
+    
+    archive.on('error', function (err) {
+        // Send an error response if the archiving process fails
+        res.status(500).json({ status: 'Error', message: err.message });
+    });
+    
+    setTimeout(() => {
+        archive.pipe(output);
+        archive.directory(directoryPath, `${username}_submissions`);
+        archive.finalize();
+    }, 5000); // 5 second delay
+
 });
 
 app.listen(port, () => {
@@ -382,7 +420,7 @@ async function createUser(username) {
         console.log(`User ${username} already exists`);
     } catch (error) {
         console.log(`User ${username} does not exist, creating...`);
-        await exec(`sudo adduser --disabled-password --gecos "" ${username}`);
+        await exec(`sudo adduser --disabled-password --gecos "" --allow-bad-names ${username}`);
         console.log(`User ${username} created`);
     }
 }
@@ -405,7 +443,8 @@ async function startJupyterServer(username) {
             '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}', // Configure Content Security Policy to allow embedding notebook in frames
             '--port=8080', // Set the port number for the Jupyter Notebook server
             '--NotebookApp.port_retries=0', // Disable port retries
-            // '--NotebookApp.disable_nbextensions_configurator=true' // Disable nbextensions configurator
+            // '--NotebookApp.disable_nbextensions_configurator=true',// Disable nbextensions configurator
+            // '--NotebookApp.nbserver_extensions="{}"' // Disable all nbextensions
         ];
 
         const notebookServerParams = [
