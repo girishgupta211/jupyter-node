@@ -114,9 +114,6 @@ define(["base/js/namespace", "base/js/promises"], function (Jupyter, promises) {
         console.log('Removing command shortcut...');
         Jupyter.notebook.keyboard_manager.command_shortcuts.remove_shortcut('f');
 
-        // Remove the 'f' shortcut from edit mode
-        console.log('Removing edit shortcut...');
-        Jupyter.notebook.keyboard_manager.edit_shortcuts.remove_shortcut('f');
     }
 
     promises.notebook_loaded.then(function () {

@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const upload = multer({ dest: '/home/gl_user/submissions/' });
+const upload = multer({ dest: '/tmp/submissions/' });
 const app = express();
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
@@ -76,7 +76,7 @@ app.get('/notebook', (req, res) => {
                 iframe.contentWindow.postMessage('Submit notebook', '*');
 
                 // Call the submit API
-                fetch('/submit', {
+                fetch('/get-dataset', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -88,7 +88,7 @@ app.get('/notebook', (req, res) => {
                     var url = window.URL.createObjectURL(blob);
                     var a = document.createElement('a');
                     a.href = url;
-                    a.download = 'submissions.zip';
+                    a.download = 'notebook.ipynb';
                     document.body.appendChild(a); // we need to append the element to the dom -> otherwise it will not work in firefox
                     a.click();    
                     a.remove();  //afterwards we remove the element again         
@@ -143,7 +143,7 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter`);
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
-        await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
+        // await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
 
         let notebookServerDetails = await startJupyterServer(username);
         res.json({ ...notebookServerDetails });
@@ -173,7 +173,7 @@ app.post('/run-notebook-signed-url', async (req, res) => {
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter`);
         await createDirectoryAndChangeOwnership(username, `/home/${username}/.jupyter/custom`);
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
-        await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
+        // await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
 
 
         try {
@@ -190,6 +190,9 @@ app.post('/run-notebook-signed-url', async (req, res) => {
                 throw error;
             }
         }
+
+        // const { stdout, stderr } = await exec(`cp ${sourcePath} ${destinationPath} && sudo chown ${username}:${username} ${destinationPath}`);
+
 
         for (let i = 0; i < datasetUrls.length; i++) {
             try {
@@ -356,30 +359,18 @@ app.post('/get-dataset', (req, res) => {
         return;
     }
 
-    const directoryPath = `/home/${username}/submissions`;
-    const output = fs.createWriteStream(`${username}_submissions.zip`);
-    const archive = archiver('zip', {
-        zlib: { level: 9 } // Sets the compression level.
-    });
+    const filePath = `/home/${username}/submissions/notebook.ipynb`;
 
-    output.on('close', function () {
-        console.log(archive.pointer() + ' total bytes');
-        console.log('archiver has been finalized and the output file descriptor has closed.');
-    
-        // Send the file after the archiving process has completed
-        res.sendFile(`${__dirname}/${username}_submissions.zip`);
+    // Check if file exists
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+        if (err) {
+            console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
+            res.status(500).json({ status: 'Error', message: 'File does not exist' });
+        } else {
+            // Send the file
+            res.sendFile(filePath);
+        }
     });
-    
-    archive.on('error', function (err) {
-        // Send an error response if the archiving process fails
-        res.status(500).json({ status: 'Error', message: err.message });
-    });
-    
-    setTimeout(() => {
-        archive.pipe(output);
-        archive.directory(directoryPath, `${username}_submissions`);
-        archive.finalize();
-    }, 5000); // 5 second delay
 
 });
 
@@ -441,19 +432,22 @@ async function startJupyterServer(username) {
 
         const additionalParams = [
             '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}', // Configure Content Security Policy to allow embedding notebook in frames
+            '--NotebookApp.allow_origin=*', // Allow requests from all origins
+            '--NotebookApp.allow_remote_access=True', // Allow remote access
+            '--NotebookApp.terminals_enabled=False', // Disable terminals
+            '--NotebookNotary.db_file=:memory:', // Set the notary database to memory
             '--port=8888', // Set the port number for the Jupyter Notebook server
             '--NotebookApp.port_retries=0', // Disable port retries
-            // '--NotebookApp.disable_nbextensions_configurator=true',// Disable nbextensions configurator
-            // '--NotebookApp.nbserver_extensions="{}"' // Disable all nbextensions
         ];
 
         const notebookServerParams = [
             '-u', username, 'env', '-i',
-            'JUPYTER_CONFIG_DIR=/home/' + username + '/.jupyter',
+            // 'JUPYTER_CONFIG_DIR=/home/' + username + '/.jupyter',
             '/usr/local/bin/jupyter',
             'notebook', '--ip=*',
             '--NotebookApp.notebook_dir=/home/' + username + '/submissions',
-            '--NotebookApp.default_url=/notebooks/notebook.ipynb'
+            '--NotebookApp.default_url=/notebooks/notebook.ipynb',
+            '--no-browser'
         ]
             .concat(additionalParams);
 
