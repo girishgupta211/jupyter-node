@@ -78,7 +78,7 @@ app.get('/notebook', (req, res) => {
                 iframe.contentWindow.postMessage('Submit notebook', '*');
 
                 // Call the submit API
-                fetch('/get-dataset', {
+                fetch('/get-submission', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -272,7 +272,6 @@ app.post('/stop-notebook', (req, res) => {
 
 });
 
-
 app.get('/list-notebooks', async (req, res) => {
     const username = req.query.username;
     if (!username) {
@@ -299,7 +298,6 @@ app.get('/list-notebooks', async (req, res) => {
         res.status(500).json({ status: 'Error', message: error.message });
     }
 });
-
 
 app.post('/submit', (req, res) => {
     const username = req.body.username;
@@ -353,7 +351,7 @@ app.post('/submit', (req, res) => {
 
 });
 
-app.post('/get-dataset', async (req, res) => {
+app.post('/get-submission', async (req, res) => {
     const username = req.body.username;
     console.log('Request body:', req.body);
 
