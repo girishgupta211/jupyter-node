@@ -15,7 +15,7 @@ const fsPromises = require('fs').promises;
 const username = os.userInfo().username;
 console.log('Username:', username);
 app.use(bodyParser.json());
-const port = 3015;
+const port = 2001;
 
 
 app.get('/', (req, res) => {
@@ -28,6 +28,8 @@ app.get('/health', (req, res) => {
 
 app.get('/notebook', (req, res) => {
     const token = req.query.token;
+    const port = req.query.port; // Extract the port number from the query parameters
+    const username = req.query.username; // Extract the username from the query parameters
     const initialTime = new Date().toString();
 
     res.send(`
@@ -59,7 +61,7 @@ app.get('/notebook', (req, res) => {
         <div id="absolute-time">Last Active At: ${initialTime}</div>
 
         <button id="submit-button">Submit Notebook</button>
-        <iframe src="http://localhost:8080/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+        <iframe src="http://localhost:${port}/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
             // Initialize the last active time
             var lastActiveTime = Date.now();
@@ -81,7 +83,7 @@ app.get('/notebook', (req, res) => {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username: 'girish', port: '8080' }) // Replace 'username' and '8080' with the actual username and port
+                    body: JSON.stringify({ username: '${username}', port: '${port}' }) // Use the username and port number from the query parameters
                 })
                 .then(response => response.blob())
                 .then(blob => {
@@ -95,11 +97,10 @@ app.get('/notebook', (req, res) => {
                 });
             });
 
-            
             // Add an event listener for messages from the iframe
             window.addEventListener('message', function(event) {
                 // Check the origin of the message
-                if (event.origin !== 'http://localhost:8080') {
+                if (event.origin !== 'http://localhost:${port}') { // Use the port number from the query parameters
                     return;
                 }
 
@@ -123,6 +124,7 @@ app.get('/notebook', (req, res) => {
 // Write an API to get notebook file and dataset file from request and run the notebook server using the dataset file and notebook file
 app.post('/run-notebook', upload.any(), async (req, res) => {
     const username = req.body.username;
+    const port = req.body.port;
 
     if (!username) {
         res.status(400).json({ status: 'Error', message: 'Username must be provided' });
@@ -145,7 +147,7 @@ app.post('/run-notebook', upload.any(), async (req, res) => {
         await copyFile('/root/.jupyter/custom/custom.js', `/home/${username}/.jupyter/custom/custom.js`, 'Jupyter custom config', username);
         // await copyFile('/root/.jupyter/jupyter_notebook_config.py', `/home/${username}/.jupyter/jupyter_notebook_config.py`, 'Jupyter notebook config', username);
 
-        let notebookServerDetails = await startJupyterServer(username);
+        let notebookServerDetails = await startJupyterServer(username, port);
         res.json({ ...notebookServerDetails });
 
     } catch (error) {
@@ -159,6 +161,7 @@ app.post('/run-notebook-signed-url', async (req, res) => {
     console.log('Request body:', req.body);
     console.log('Request body:', JSON.stringify(req.body));
     const username = req.body.username;
+    const port = req.body.port;
     const notebookUrl = req.body.notebookUrl;
     const datasetUrls = req.body.datasetUrls;
 
@@ -212,7 +215,7 @@ app.post('/run-notebook-signed-url', async (req, res) => {
             }
         }
 
-        let notebookServerUrl = await startJupyterServer(username);
+        let notebookServerUrl = await startJupyterServer(username, port);
         res.json({ ...notebookServerUrl });
 
     } catch (error) {
@@ -350,9 +353,9 @@ app.post('/submit', (req, res) => {
 
 });
 
-app.post('/get-dataset', (req, res) => {
+app.post('/get-dataset', async (req, res) => {
     const username = req.body.username;
-    const port = req.body.port;
+    console.log('Request body:', req.body);
 
     if (!username) {
         res.status(400).json({ status: 'Error', message: 'Username must be provided' });
@@ -361,17 +364,15 @@ app.post('/get-dataset', (req, res) => {
 
     const filePath = `/home/${username}/submissions/notebook.ipynb`;
 
-    // Check if file exists
-    fs.access(filePath, fs.constants.F_OK, (err) => {
-        if (err) {
-            console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
-            res.status(500).json({ status: 'Error', message: 'File does not exist' });
-        } else {
-            // Send the file
-            res.sendFile(filePath);
-        }
-    });
-
+    try {
+        // Check if file exists
+        await fsPromises.access(filePath, fs.constants.F_OK);
+        // Send the file
+        res.sendFile(filePath);
+    } catch (err) {
+        console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
+        res.status(500).json({ status: 'Error', message: 'File does not exist' });
+    }
 });
 
 // Function to handle file uploads
@@ -423,7 +424,7 @@ async function createDirectoryAndChangeOwnership(username, directory) {
 }
 
 
-async function startJupyterServer(username) {
+async function startJupyterServer(username, port) {
     return new Promise((resolve, reject) => {
 
         const additionalParams = [
@@ -432,7 +433,7 @@ async function startJupyterServer(username) {
             '--NotebookApp.allow_remote_access=True', // Allow remote access
             '--NotebookApp.terminals_enabled=False', // Disable terminals
             '--NotebookNotary.db_file=:memory:', // Set the notary database to memory
-            '--port=8080', // Set the port number for the Jupyter Notebook server
+            `--port=${port}`, // Set the port number for the Jupyter Notebook server
             '--NotebookApp.port_retries=0', // Disable port retries
         ];
 
