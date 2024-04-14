@@ -59,7 +59,7 @@ app.get('/notebook', (req, res) => {
         <div id="absolute-time">Last Active At: ${initialTime}</div>
 
         <button id="submit-button">Submit Notebook</button>
-        <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+        <iframe src="http://localhost:8080/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
             // Initialize the last active time
             var lastActiveTime = Date.now();
@@ -81,7 +81,7 @@ app.get('/notebook', (req, res) => {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username: 'girish', port: '8888' }) // Replace 'username' and '8888' with the actual username and port
+                    body: JSON.stringify({ username: 'girish', port: '8080' }) // Replace 'username' and '8080' with the actual username and port
                 })
                 .then(response => response.blob())
                 .then(blob => {
@@ -99,7 +99,7 @@ app.get('/notebook', (req, res) => {
             // Add an event listener for messages from the iframe
             window.addEventListener('message', function(event) {
                 // Check the origin of the message
-                if (event.origin !== 'http://localhost:8888') {
+                if (event.origin !== 'http://localhost:8080') {
                     return;
                 }
 
@@ -374,10 +374,6 @@ app.post('/get-dataset', (req, res) => {
 
 });
 
-app.listen(port, () => {
-    console.log(`Server is listening at http://localhost:${port}`);
-});
-
 // Function to handle file uploads
 function handleFileUpload(req) {
     let notebookFile;
@@ -436,7 +432,7 @@ async function startJupyterServer(username) {
             '--NotebookApp.allow_remote_access=True', // Allow remote access
             '--NotebookApp.terminals_enabled=False', // Disable terminals
             '--NotebookNotary.db_file=:memory:', // Set the notary database to memory
-            '--port=8888', // Set the port number for the Jupyter Notebook server
+            '--port=8080', // Set the port number for the Jupyter Notebook server
             '--NotebookApp.port_retries=0', // Disable port retries
         ];
 
@@ -514,3 +510,14 @@ async function deleteUser(username) {
         console.log(`Deleted user: ${stdout}`);
     }
 }
+
+
+app.listen(port, () => {
+    console.log(`Server is listening at http://localhost:${port}`);
+
+    fs.writeFile('/tmp/test', 'Hello World!', function (err) {
+        if (err) return console.log(err);
+        console.log('Hello World > /tmp/test');
+    });
+
+});

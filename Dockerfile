@@ -38,6 +38,6 @@ COPY custom.js /root/.jupyter/custom/custom.js
 EXPOSE 3015
 
 # Expose port for Jupyter Notebook
-EXPOSE 8888
+EXPOSE 8080
 # Command to run the Node.js server
 CMD ["node", "server.js"]
