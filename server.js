@@ -59,7 +59,7 @@ app.get('/notebook', (req, res) => {
         <div id="absolute-time">Last Active At: ${initialTime}</div>
 
         <button id="submit-button">Submit Notebook</button>
-        <iframe src="http://localhost:8080/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
+        <iframe src="http://localhost:8888/notebooks/notebook.ipynb?token=${token}" width="100%" height="500px"></iframe>
         <script>
             // Initialize the last active time
             var lastActiveTime = Date.now();
@@ -81,7 +81,7 @@ app.get('/notebook', (req, res) => {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ username: 'girish', port: '8080' }) // Replace 'username' and '8080' with the actual username and port
+                    body: JSON.stringify({ username: 'girish', port: '8888' }) // Replace 'username' and '8888' with the actual username and port
                 })
                 .then(response => response.blob())
                 .then(blob => {
@@ -99,7 +99,7 @@ app.get('/notebook', (req, res) => {
             // Add an event listener for messages from the iframe
             window.addEventListener('message', function(event) {
                 // Check the origin of the message
-                if (event.origin !== 'http://localhost:8080') {
+                if (event.origin !== 'http://localhost:8888') {
                     return;
                 }
 
@@ -420,7 +420,7 @@ async function createUser(username) {
         console.log(`User ${username} already exists`);
     } catch (error) {
         console.log(`User ${username} does not exist, creating...`);
-        await exec(`sudo adduser --disabled-password --gecos "" --allow-bad-names ${username}`);
+        await exec(`sudo adduser --disabled-password --gecos "" ${username}`);
         console.log(`User ${username} created`);
     }
 }
@@ -441,7 +441,7 @@ async function startJupyterServer(username) {
 
         const additionalParams = [
             '--NotebookApp.tornado_settings={"headers": {"Content-Security-Policy": "frame-ancestors \'self\' *"}}', // Configure Content Security Policy to allow embedding notebook in frames
-            '--port=8080', // Set the port number for the Jupyter Notebook server
+            '--port=8888', // Set the port number for the Jupyter Notebook server
             '--NotebookApp.port_retries=0', // Disable port retries
             // '--NotebookApp.disable_nbextensions_configurator=true',// Disable nbextensions configurator
             // '--NotebookApp.nbserver_extensions="{}"' // Disable all nbextensions
