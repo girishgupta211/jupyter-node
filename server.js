@@ -351,27 +351,46 @@ app.post('/submit', (req, res) => {
 
 });
 
+
 app.post('/get-submission', async (req, res) => {
     const username = req.body.username;
-    console.log('Request body:', req.body);
+    console.log(`Received request for username: ${username}`);
 
     if (!username) {
+        console.log('Username not provided');
         res.status(400).json({ status: 'Error', message: 'Username must be provided' });
         return;
     }
 
     const filePath = `/home/${username}/submissions/notebook.ipynb`;
+    console.log(`File path: ${filePath}`);
 
     try {
         // Check if file exists
+        console.log('Checking if file exists');
         await fsPromises.access(filePath, fs.constants.F_OK);
-        // Send the file
-        res.sendFile(filePath);
+        console.log('File exists');
+
+        // Read the file
+        console.log('Reading file');
+        const data = await fsPromises.readFile(filePath, 'utf8');  // Read the file as text
+        console.log('File read successfully');
+
+        // Parse the file data as JSON
+        console.log('Parsing file data');
+        const notebook = JSON.parse(data);  // Parse the file data as JSON
+        console.log('File data parsed successfully');
+
+        // Send the file data
+        console.log('Sending file data', notebook);
+        res.json(notebook);  // Send the file data as JSON
+        console.log('File data sent');
     } catch (err) {
-        console.error(`${filePath} ${err.code === 'ENOENT' ? 'does not exist' : 'is read-only'}`);
-        res.status(500).json({ status: 'Error', message: 'File does not exist' });
+        console.error(`Error reading file ${filePath}: ${err}`);
+        res.status(500).json({ status: 'Error', message: 'Error reading file' });
     }
 });
+
 
 // Function to handle file uploads
 function handleFileUpload(req) {
